@@ -1,0 +1,110 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "jellyfin.fullname" . }}
+  labels:
+    {{- include "jellyfin.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "jellyfin.selectorLabels" . | nindent 6 }}
+  serviceName: jellyfin
+  volumeClaimTemplates:
+  - metadata:
+      name: jellyfin-config
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: {{ .Values.storage.config.storageClassName }}
+      resources:
+        requests:
+          storage: 20Gi       
+  - metadata:
+      name: jellyfin-transcode
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: {{ .Values.storage.transcode.storageClassName }}
+      resources:
+        requests:
+          storage: 100Gi
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "jellyfin.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "jellyfin.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      volumes:
+#        - name: jellyfin-config
+#          persistentVolumeClaim: 
+#            claimName: {{ .Values.storage.config.name }}
+#        - name: jellyfin-transcode
+#          persistentVolumeClaim: 
+#            claimName: {{ .Values.storage.transcode.name }}
+        - name: nfs-video
+          nfs:
+            server: {{ .Values.storage.video.server }}
+            path: {{ .Values.storage.video.path }}
+        - name: nfs-music
+          nfs:
+            server: {{ .Values.storage.music.server }}
+            path: {{ .Values.storage.music.path }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+          - name: TZ
+            value: {{ .Values.TZ }}
+          - name: PGID
+            value: "\x31\x30\x30"    # < ASCII code for '100'
+          - name: PUID
+            value: "\x31\x30\x33\x35" # < ACII code for '1035'
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          volumeMounts:
+            - name: nfs-video
+              mountPath: /data/video
+            - name: nfs-music
+              mountPath: /data/music
+            - name: jellyfin-config
+              mountPath: /config
+            - name: jellyfin-transcode
+              mountPath: /config/data/transcodes
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8096
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8096
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
