@@ -1,0 +1,128 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "plex.fullname" . }}
+  labels:
+    {{- include "plex.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "plex.selectorLabels" . | nindent 6 }}
+  serviceName: plex
+  volumeClaimTemplates:
+  - metadata:
+      name: plex-config
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: {{ .Values.storage.config.storageClassName }}
+      resources:
+        requests:
+          storage: 20Gi       
+  - metadata:
+      name: plex-transcode
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: {{ .Values.storage.transcode.storageClassName }}
+      resources:
+        requests:
+          storage: 100Gi
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "plex.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "plex.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      volumes:
+#        - name: plex-config
+#          persistentVolumeClaim: 
+#            claimName: {{ .Values.storage.config.name }}
+#        - name: plex-transcode
+#          persistentVolumeClaim: 
+#            claimName: {{ .Values.storage.transcode.name }}
+        - name: nfs-video
+          nfs:
+            server: {{ .Values.storage.video.server }}
+            path: {{ .Values.storage.video.path }}
+        - name: nfs-music
+          nfs:
+            server: {{ .Values.storage.music.server }}
+            path: {{ .Values.storage.music.path }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+          - name: TZ
+            value: {{ .Values.TZ }}
+          - name: ALLOWED_NETWORKS
+            value: {{ .Values.allowed_networks }}
+          - name: VERSION
+            value: latest
+          - name: ADVERTISE_IP
+            value: http://{{ .Values.service.ip }}:{{ .Values.service.port }}
+          - name: PGID
+            value: "\x31\x30\x30"    # < ASCII code for '100'
+          - name: PUID
+            value: "\x31\x30\x33\x35" # < ACII code for '1035'
+          ports:
+            - name: plex-http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+            - containerPort: 32400
+              name: plex-udp
+              protocol: UDP
+            - containerPort: 32469 #Plex DLNA
+              name: plex-dlna
+              protocol: TCP
+            - containerPort: 5353
+              name: plex-discovery
+              protocol: UDP
+            - containerPort: 1900 #Plex DLNA
+              name: plex-dlna-udp
+              protocol: UDP
+          volumeMounts:
+            - name: nfs-video
+              mountPath: /data/video
+            - name: nfs-music
+              mountPath: /data/music
+            - name: plex-config
+              mountPath: /config
+            - name: plex-transcode
+              mountPath: /transcode
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 32400
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 32400
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

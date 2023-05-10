@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "plex.fullname" . }}
+  labels:
+    {{- include "plex.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  loadBalancerIP: {{ .Values.service.ip }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: 32400
+      protocol: TCP
+      name: plex-web
+    - port: 32469
+      targetPort: 32469
+      protocol: TCP
+      name: plex-dlna2
+    - port: 1900
+      targetPort: 1900
+      protocol: TCP
+      name: plex-dlna
+  selector:
+    {{- include "plex.selectorLabels" . | nindent 4 }}

@@ -1,17 +1,23 @@
-# Default values for jellyfin.
+# Default values for plex.
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
 replicaCount: 1
 
 image:
-  repository: lscr.io/linuxserver/jellyfin
+  repository: plexinc/pms-docker
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
   tag: "latest"
 
 TZ: America/LosAngeles
-  
+plex_claim: FAKECLAIM
+allowed_networks: "10.0.0.0/8"
+
+service:
+  type: LoadBalancer
+  port: 80
+  ip: 10.6.1.78
 
 storage:
   config:
@@ -51,10 +57,6 @@ securityContext: {}
   # runAsNonRoot: true
   # runAsUser: 1000
 
-service:
-  type: LoadBalancer
-  port: 8096
-  ip: 10.6.1.77
   
 ingress:
   enabled: false
